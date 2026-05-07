@@ -30,9 +30,11 @@ export class Flags {
     static UseCamera = 'UseCamera' as const;
     static KeyboardInput = 'KeyboardInput' as const;
     static MouseInput = 'MouseInput' as const;
+    static MouseDoubleClickAutoRelease = 'MouseDoubleClickAutoRelease' as const;
     static TouchInput = 'TouchInput' as const;
     static GamepadInput = 'GamepadInput' as const;
     static XRControllerInput = 'XRControllerInput' as const;
+    static AutoEnterVR = 'AutoEnterVR' as const;
     static WaitForStreamer = 'WaitForStreamer' as const;
     static HideUI = 'HideUI' as const;
     static EnableCaptureTimeExt = 'EnableCaptureTimeExt' as const;
@@ -506,6 +508,19 @@ export class Config {
         );
 
         this.flags.set(
+            Flags.MouseDoubleClickAutoRelease,
+            new SettingFlag(
+                Flags.MouseDoubleClickAutoRelease,
+                'Auto release after double-click',
+                'After sending a MouseDouble message, also send a matching MouseUp so the streamer’s pressed-button state stays balanced. Disable to restore pre-fix behaviour if your project handles the doubleclick release itself.',
+                settings && Object.prototype.hasOwnProperty.call(settings, Flags.MouseDoubleClickAutoRelease)
+                    ? settings[Flags.MouseDoubleClickAutoRelease]
+                    : true,
+                useUrlParams
+            )
+        );
+
+        this.flags.set(
             Flags.TouchInput,
             new SettingFlag(
                 Flags.TouchInput,
@@ -540,6 +555,19 @@ export class Config {
                 settings && Object.prototype.hasOwnProperty.call(settings, Flags.XRControllerInput)
                     ? settings[Flags.XRControllerInput]
                     : true,
+                useUrlParams
+            )
+        );
+
+        this.flags.set(
+            Flags.AutoEnterVR,
+            new SettingFlag(
+                Flags.AutoEnterVR,
+                'Auto enter VR',
+                'When the video is ready and an immersive-vr session is supported, request the WebXR session automatically. May fail if the browser requires a user gesture to start a WebXR session.',
+                settings && Object.prototype.hasOwnProperty.call(settings, Flags.AutoEnterVR)
+                    ? settings[Flags.AutoEnterVR]
+                    : false,
                 useUrlParams
             )
         );
