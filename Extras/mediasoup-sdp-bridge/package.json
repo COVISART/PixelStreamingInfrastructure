@@ -1,7 +1,7 @@
 {
   "name": "@epicgames-ps/mediasoup-sdp-bridge",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Node.js library to allow integration of SDP based clients with mediasoup",
   "contributors": [
     "Iñaki Baz Castillo <ibc@aliax.net> (https://inakibaz.me)",
@@ -12,7 +12,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/EpicGamesExt/PixelStreamingInfrastructure.git"
+    "url": "https://github.com/EpicGames/PixelStreamingInfrastructure.git"
   },
   "funding": {
     "type": "opencollective",
