@@ -6,7 +6,7 @@
 	"player_port": "80",
 	"sfu_port": "8889",
 	"serve": true,
-	"http_root": "D:\\PixelStreamingInfrastructure\\SignallingWebServer\\www",
+	"http_root": "www",
 	"homepage": "player.html",
 	"https": false,
 	"https_port": 443,

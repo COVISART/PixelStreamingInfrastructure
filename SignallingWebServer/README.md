@@ -93,6 +93,86 @@ npm start -- --console_messages --https_redirect verbose --serve --log_config --
 ```
 Note that `www` being used as the http root assumes your Frontend is in that directory.
 
+## Running as a Windows service
+
+`start.bat` runs the server in a console window, which means it stops when that window
+closes or the user logs off. To keep it running from boot without anyone logged in,
+install it as a Windows service:
+
+```
+.\SignallingWebServer\platform_scripts\cmd\install_service.bat
+```
+
+The script asks for elevation, builds anything that has not been built yet, checks that
+the server actually starts, and then registers a service that starts automatically at
+boot and restarts itself if the server exits. Node is not a service binary, so the
+service is hosted by [WinSW](https://github.com/winsw/winsw), a single self-contained
+executable that the script downloads on first run and verifies against a pinned SHA-256.
+
+The service reads the same `config.json` as `start.bat`, so ports, `http_root` and TLS
+settings are configured there. Edit it and restart the service to apply a change:
+
+```
+Restart-Service PixelStreamingSignalling
+```
+
+Run the PowerShell script directly from an Administrator prompt for the full set of
+options, including passing extra arguments through to the server:
+
+```
+.\install_service.ps1 -ServerArgs '--player_port','8080' -OpenFirewall
+.\install_service.ps1 -Force -Rebuild
+Get-Help .\install_service.ps1 -Detailed
+```
+
+### STUN and TURN
+
+The TURN options mirror the ones `start.bat` takes, and `-StartTurn` installs the bundled
+coturn as a second service so it comes back at boot as well. This:
+
+```
+.\install_service.ps1 -StartTurn -TurnServer 192.168.1.50:19303 -PublicIp 203.0.113.7
+```
+
+is the service equivalent of:
+
+```
+.\start.bat --start-turn --turn 192.168.1.50:19303 --publicip 203.0.113.7
+```
+
+`-TurnUser` and `-TurnPass` default to the same values `start.bat` uses. The two services
+are independent, so either can be restarted on its own.
+
+Two deliberate differences from `start.bat`:
+
+- The ICE configuration is written to `service\peer_options.json` and passed with
+  `--peer_options_file` rather than as JSON on the command line. The server itself
+  recommends this, and it stops cmd.exe from eating `^` and `!` in a TURN password.
+- `start.bat` looks up the public IP from `api.ipify.org` when `--publicip` is absent. A
+  service that starts at every boot would go stale holding whatever that returned at
+  install time, so the script uses the machine's own address instead and tells you.
+
+`-TurnServer` is the address **players** connect to, so it has to be reachable from
+wherever they are — `127.0.0.1` only works for a browser on the streaming machine. coturn
+listens on `-TurnLocalIp`, which defaults to the address this machine's hostname resolves
+to; set it explicitly on a machine with several adapters.
+
+Some notes:
+
+- Nothing is written outside the repository. The wrapper, its generated configuration and
+  its logs live in `platform_scripts\cmd\service`, next to the downloaded `node` and
+  `coturn` directories, and the server keeps writing its own logs to
+  `SignallingWebServer\logs`.
+- Firewall ports are only opened when you pass `-OpenFirewall`. With `-StartTurn` that
+  also covers coturn's relay range, UDP 49152-65535, which TURN cannot relay without.
+- On a machine with no internet access, download the WinSW executable elsewhere and pass
+  it with `-WinswPath`.
+- To remove the services again:
+
+```
+.\SignallingWebServer\platform_scripts\cmd\uninstall_service.bat
+```
+
 ## Development
 This implementation is built on the [Signalling](../Signalling) library which is supplied as a library for developing signalling applications. Visit its [documentation](../Signalling/docs) for more information.
 
