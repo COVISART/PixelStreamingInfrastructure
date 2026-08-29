@@ -120,7 +120,11 @@
 
 .PARAMETER Force
     Replace existing services that have the same names.
+.EXAMPLE
+    .\install_service.bat -StartTurn -TurnServer 192.168.137.1:19303 -PublicIp 192.168.137.1 -TurnLocalIp 192.168.137.1 -DelayedStart -OpenFirewall
 
+    Service for Karaok setup
+    
 .EXAMPLE
     .\install_service.ps1
 
