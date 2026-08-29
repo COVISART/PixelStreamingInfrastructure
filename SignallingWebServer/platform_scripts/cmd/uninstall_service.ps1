@@ -18,6 +18,10 @@
     TURN service id to remove, if install_service.ps1 -StartTurn was used. Ignored when
     no such service exists.
 
+.PARAMETER Services
+    Which of the two to remove. Both by default; use Turn to drop a TURN server that is
+    no longer wanted while leaving the signalling server running.
+
 .PARAMETER RemoveFirewallRules
     Also delete the inbound firewall rules in the "Pixel Streaming" group that
     install_service.ps1 -OpenFirewall created. Off by default, because other things on
@@ -41,6 +45,9 @@ param(
 
     [ValidatePattern('^[A-Za-z0-9_.-]+$')]
     [string] $TurnServiceName = 'PixelStreamingTurn',
+
+    [ValidateSet('Both', 'Signalling', 'Turn')]
+    [string] $Services = 'Both',
 
     [switch] $RemoveFirewallRules,
     [switch] $Purge
@@ -123,8 +130,8 @@ function Remove-WrappedService([string] $Id) {
     }
 }
 
-Remove-WrappedService -Id $ServiceName
-Remove-WrappedService -Id $TurnServiceName
+if ($Services -in @('Both', 'Signalling')) { Remove-WrappedService -Id $ServiceName }
+if ($Services -in @('Both', 'Turn')) { Remove-WrappedService -Id $TurnServiceName }
 
 if ($RemoveFirewallRules) {
     Write-Step 'Removing the Pixel Streaming firewall rules'

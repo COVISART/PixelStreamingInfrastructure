@@ -157,6 +157,33 @@ wherever they are — `127.0.0.1` only works for a browser on the streaming mach
 listens on `-TurnLocalIp`, which defaults to the address this machine's hostname resolves
 to; set it explicitly on a machine with several adapters.
 
+### Machines with no internet
+
+The default STUN server is `stun.l.google.com`, which cannot be reached without internet
+access. Leave it out on an isolated network:
+
+```
+.\install_service.ps1 -StunServer ''
+```
+
+On a LAN, players and the streamer reach each other on host candidates, so with no ICE
+servers configured at all the connection is established immediately. Keeping an
+unreachable STUN entry does not break the connection but does make every player wait for
+the lookup to time out before falling back.
+
+Two failure modes are worth knowing about, because both look like "signalling connects
+but streaming never starts":
+
+- **An ICE server URL with no host.** Browsers refuse to create the peer connection at
+  all — Chrome says `ICE server parsing failed: Invalid hostname format`, older builds
+  say the URL "has an undefined domain". `start.bat` produces this offline: it asks
+  `api.ipify.org` for the public IP, gets nothing, and builds `turn::19303` from the
+  empty answer. Pass `--publicip` to `start.bat` to avoid it. This script rejects such a
+  URL rather than installing a service that hands it out.
+- **A TURN server that is configured but not running.** ICE gathering keeps retrying it
+  instead of completing. The script warns when `-TurnLocalIp` is not an address that
+  currently exists on the machine, which is the usual reason coturn cannot bind.
+
 Some notes:
 
 - Nothing is written outside the repository. The wrapper, its generated configuration and

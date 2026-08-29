@@ -267,6 +267,13 @@ function Get-XmlText([string] $Value) {
     return [System.Security.SecurityElement]::Escape($Value)
 }
 
+# Host part of a "host:port" pair, coping with a bracketed IPv6 literal. Returns an empty
+# string when there is no host, which is the case worth catching.
+function Get-UriHost([string] $Value) {
+    if ($Value -match '^\[(.+)\]') { return $Matches[1] }
+    return ($Value -split ':')[0]
+}
+
 function Test-TcpPort([string] $ComputerName, [int] $Port, [int] $TimeoutMs = 3000) {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
@@ -516,6 +523,14 @@ foreach ($id in $wanted) {
     }
 }
 
+# Reinstalling without -StartTurn leaves any previous TURN service in place. It is not
+# this script's to delete when it was not asked to manage it, but a TURN service that is
+# no longer referenced by the ICE configuration will sit there restarting on failure.
+if (-not $StartTurn -and (Get-Service -Name $TurnServiceName -ErrorAction SilentlyContinue)) {
+    Write-Warn "The '$TurnServiceName' service is still installed but -StartTurn was not passed, so nothing here will point players at it."
+    Write-Warn "Remove just that one with: .\uninstall_service.ps1 -Services Turn"
+}
+
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
@@ -755,6 +770,55 @@ if ($peerOptionsWanted) {
         }
         else {
             $turnPort = [int]$turnPortText
+        }
+    }
+
+    # A stun: or turn: URL whose host is empty makes browsers refuse to construct the
+    # RTCPeerConnection at all - Chrome reports "ICE server parsing failed: Invalid
+    # hostname format", older builds say the URL "has an undefined domain". The player
+    # then fails the moment streaming starts while signalling carries on working, which
+    # is a confusing thing to debug. start.bat produces exactly this on a machine with no
+    # internet, where its api.ipify.org lookup returns nothing and the TURN address
+    # becomes ":19303", so the value is checked here before it reaches a browser.
+    foreach ($entry in @(@{ Kind = 'STUN'; Value = $StunServer; Parameter = '-StunServer' },
+                         @{ Kind = 'TURN'; Value = $TurnServer; Parameter = '-TurnServer' })) {
+        if (-not $entry.Value) { continue }
+        $entryHost = Get-UriHost $entry.Value
+        if (-not $entryHost) {
+            throw "The $($entry.Kind) server '$($entry.Value)' has no host part, so players would be sent an ICE server URL that no browser will accept. Pass a host or address to $($entry.Parameter)."
+        }
+    }
+
+    # coturn binds this address, so it has to exist on this machine. Without the check
+    # the install still reports success and the service just fails to bind for ever.
+    if ($StartTurn) {
+        $localAddresses = @()
+        try {
+            $localAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | ForEach-Object { $_.IPAddress })
+        }
+        catch {
+            # Older or trimmed installs may not have the NetTCPIP module; skip the check
+            # rather than block the install on it.
+            $localAddresses = @()
+        }
+        if ($localAddresses -and ($TurnLocalIp -notin $localAddresses)) {
+            Write-Warn "$TurnLocalIp is not an address on this machine right now, so the TURN server cannot bind to it and will keep failing until that adapter is up."
+            Write-Warn "Addresses currently available: $($localAddresses -join ', '). Pass -TurnLocalIp to pick one."
+        }
+    }
+
+    # A public STUN server is useless on a network with no route to it, and a peer that
+    # cannot reach it spends the ICE gathering timeout waiting before falling back to
+    # host candidates.
+    if ($StunServer) {
+        $stunHost = Get-UriHost $StunServer
+        if ($stunHost -and -not ($stunHost -as [ipaddress])) {
+            try {
+                [System.Net.Dns]::GetHostAddresses($stunHost) | Out-Null
+            }
+            catch {
+                Write-Warn "This machine cannot resolve '$stunHost'. On a network with no internet that STUN entry does nothing except slow down connection setup - pass -StunServer '' to leave it out."
+            }
         }
     }
 
