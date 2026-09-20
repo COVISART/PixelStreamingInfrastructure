@@ -22,7 +22,7 @@ becomes:
 - install_service.ps1 / uninstall_service.ps1 : The PowerShell scripts the .bat files call. Run them
                           directly from an Administrator prompt for the full set of options, or run
                           "Get-Help .\install_service.ps1 -Detailed" to see them.
-
+.\install_service.bat -StartTurn -TurnServer 192.168.137.1:19303 -PublicIp 192.168.137.1 -TurnLocalIp 192.168.137.1 -DelayedStart -OpenFirewall
 Tips:
 
 - You can provide --help to start.bat to get a list of customizable arguments.
