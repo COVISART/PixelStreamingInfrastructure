@@ -19,26 +19,26 @@
     "author": "Epic Games",
     "license": "MIT",
     "devDependencies": {
-        "@types/node": "^22.14.0",
+        "@types/node": "^22.20.2",
         "copy-webpack-plugin": "^12.0.2",
         "eslint": "^9.39.0",
         "eslint-config-prettier": "^10.0.1",
         "eslint-plugin-prettier": "^5.2.3",
-        "eslint-plugin-tsdoc": "^0.4.0",
-        "html-webpack-plugin": "^5.6.3",
+        "eslint-plugin-tsdoc": "^0.5.2",
+        "html-webpack-plugin": "^5.6.8",
         "mini-css-extract-plugin": "^2.9.2",
         "rimraf": "^6.0.1",
-        "ts-loader": "^9.5.2",
+        "ts-loader": "^9.6.2",
         "typescript": "^5.7.3",
-        "typescript-eslint": "8.57.2",
-        "webpack": "^5.97.1",
+        "typescript-eslint": "8.70.0",
+        "webpack": "^5.110.3",
         "webpack-cli": "^6.0.1",
         "webpack-dev-server": "^5.2.5",
         "webpack-node-externals": "^3.0.0"
     },
     "dependencies": {
         "@epicgames-ps/lib-pixelstreamingcommon-ue5.7": "*",
-        "body-parser": "^1.20.4"
+        "body-parser": "^2.3.0"
     },
     "overrides": {
         "http-proxy-middleware": "2.0.8"

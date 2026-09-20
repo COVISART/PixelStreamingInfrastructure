@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 20.x
           cache: 'npm'
@@ -34,12 +34,18 @@ jobs:
       # branch's workspace. It runs inside the action's release-branch worktree
       # (after its internal `git reset --hard`) so the rewrites survive.
       - name: Create Release Pull Request
-        uses: changesets/action@v1.4.10
+        # Stay on v1: changesets/action v2 requires Changesets CLI v3 and this
+        # repo is on @changesets/cli 2.x. v1.9.0 still runs on node24, so the
+        # Node 20 removal is covered without forcing a CLI major.
+        uses: changesets/action@v1.9.0
         env:
           # Org policy forbids the default GITHUB_TOKEN from creating PRs, so a
           # PAT (repo + workflow scope) is required to open the release PR.
           GITHUB_TOKEN: ${{ secrets.AUTOMATION_PAT }}
         with:
+          # github-token defaults to the default GITHUB_TOKEN, which org policy
+          # forbids from creating PRs, so pass the PAT explicitly.
+          github-token: ${{ secrets.AUTOMATION_PAT }}
           title: '[Bot] NPM Packages Release ${{ github.ref_name }}'
           commit: 'Updated NPM changelogs'
           version: bash .github/scripts/version-with-normalized-suffixes.sh
