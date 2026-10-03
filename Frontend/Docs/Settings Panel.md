@@ -49,7 +49,7 @@ This page will be updated with new features and commands as they become availabl
 | --- | --- |
 | **Min QP** | The lower bound of quantization parameter (QP) of the encoder. 0 = best quality, 51 = worst quality. |
 | **Max QP** | The upper bound of quantization parameter (QP) of the encoder. 0 = best quality, 51 = worst quality. |
-| **Preferred codec** | The preferred codec to be used during codec negotiation. |
+| **Preferred codec** | The preferred codec to be used during codec negotiation. Only codecs that both the browser and the streamer support are offered. H.264 is the default. H.265 (HEVC) is listed when the browser can decode it and is used when the streamer is set to encode H.265 in the Unreal Engine application. It can also be selected up front with `?PreferredCodec=H265`. If the browser can't decode any codec the streamer offers, a warning is logged and no video will play. Streaming H.265 through the SFU needs the SFU's `enableH265` option, see the [SFU README](../../SFU/README.md). |
 | **Preferred quality** | The preferred quality of the stream when using the SFU. If using H.264 or VP8, the quality options will be easily readable "Low", "Medium" or "High". If using VP9 SVC, the options will refer to all the possible spatial and temporal layer combinations supported as seen [here](https://www.w3.org/TR/webrtc-svc/#scalabilitymodes*) |
 
 ### WebRTC

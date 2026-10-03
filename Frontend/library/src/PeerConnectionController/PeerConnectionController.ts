@@ -5,6 +5,7 @@ import { Config, OptionParameters, Flags } from '../Config/Config';
 import { AggregatedStats } from './AggregatedStats';
 import { parseRtpParameters, splitSections } from 'sdp';
 import { RTCUtils } from '../Util/RTCUtils';
+import { BrowserUtils } from '../Util/BrowserUtils';
 import { CodecStats } from './CodecStats';
 import { SDPUtils } from '@epicgames-ps/lib-pixelstreamingcommon-ue5.8';
 import { LatencyCalculator, LatencyInfo } from './LatencyCalculator';
@@ -131,10 +132,7 @@ export class PeerConnectionController {
             }
 
             // Add our list of preferred codecs, in order of preference
-            this.config.setOptionSettingOptions(
-                OptionParameters.PreferredCodec,
-                this.fuzzyIntersectUEAndBrowserCodecs(offer)
-            );
+            this.setPreferredCodecOptions(offer);
 
             void this.setupTransceiversAsync(useMic, useCamera).finally(() => {
                 this.peerConnection
@@ -161,10 +159,27 @@ export class PeerConnectionController {
         void this.peerConnection?.setRemoteDescription(answer);
 
         // Add our list of preferred codecs, in order of preference
-        this.config.setOptionSettingOptions(
-            OptionParameters.PreferredCodec,
-            this.fuzzyIntersectUEAndBrowserCodecs(answer)
-        );
+        this.setPreferredCodecOptions(answer);
+    }
+
+    /**
+     * Set the preferred codec options to the codecs that both the remote peer and this browser support.
+     * Warns if the remote peer offered codecs but this browser supports none of them, as the video will not play.
+     * @param sdp The remote sdp
+     */
+    setPreferredCodecOptions(sdp: RTCSessionDescriptionInit) {
+        const supportedCodecs = this.fuzzyIntersectUEAndBrowserCodecs(sdp);
+        this.config.setOptionSettingOptions(OptionParameters.PreferredCodec, supportedCodecs);
+
+        // parseAvailableCodecs can't list the remote codecs when getCapabilities is unavailable (e.g. Firefox)
+        if (supportedCodecs.length === 0 && RTCRtpReceiver.getCapabilities) {
+            const remoteCodecs = this.parseAvailableCodecs(sdp);
+            if (remoteCodecs.length > 0) {
+                Logger.Warning(
+                    `This browser does not report support for any of the video codecs offered by the streamer (${remoteCodecs.join(', ')}), so no video is likely to play. H.265 in particular requires a browser with HEVC decoding support.`
+                );
+            }
+        }
     }
 
     /**
@@ -243,10 +258,21 @@ export class PeerConnectionController {
      * @returns A modified Session Descriptor
      */
     mungeSDP(sdp: string, useMic: boolean) {
+        const bitrateHints = ';x-google-start-bitrate=10000;x-google-max-bitrate=100000';
         let mungedSDP = sdp.replace(
             /(a=fmtp:\d+ .*level-asymmetry-allowed=.*)\r\n/gm,
-            '$1;x-google-start-bitrate=10000;x-google-max-bitrate=100000\r\n'
+            `$1${bitrateHints}\r\n`
         );
+
+        // H.265 fmtp lines don't reliably have level-asymmetry-allowed to key off, so find them through their payload
+        // types. Lines that already got the hints above (an SFU can add level-asymmetry-allowed to H.265) are skipped.
+        const h265RtpMap = /^a=rtpmap:(\d+) H265\/90000/gim;
+        for (let match = h265RtpMap.exec(sdp); match !== null; match = h265RtpMap.exec(sdp)) {
+            mungedSDP = mungedSDP.replace(
+                new RegExp(`^(a=fmtp:${match[1]} (?!.*x-google-start-bitrate).*)\r\n`, 'm'),
+                `$1${bitrateHints}\r\n`
+            );
+        }
 
         // set max bitrate to highest bitrate Opus supports
         let audioSDP = 'maxaveragebitrate=510000;';
@@ -465,40 +491,25 @@ export class PeerConnectionController {
                     transceiver.receiver.track.kind === 'video' &&
                     transceiver.setCodecPreferences
                 ) {
-                    // Get our preferred codec from the codecs options drop down
-                    const preferredRTPCodec = this.preferredCodec.split(' ');
-                    const preferredRTCRtpCodecCapability: RTCRtpCodec = {
-                        mimeType: 'video/' + preferredRTPCodec[0] /* Name */,
-                        clockRate: 90000 /* All current video formats in browsers have 90khz clock rate */,
-                        sdpFmtpLine: preferredRTPCodec[1] ? preferredRTPCodec[1] : ''
-                    };
-
-                    // Populate a list of codecs we will support with our preferred one in the first position
-                    const ourSupportedCodecs: Array<RTCRtpCodec> = [preferredRTCRtpCodecCapability];
-
-                    // Go through all codecs the browser supports and add them to the list (in any order)
-                    RTCRtpReceiver.getCapabilities('video').codecs.forEach(
-                        (browserSupportedCodec: RTCRtpCodec) => {
-                            // Don't add our preferred codec again, but add everything else
-                            if (browserSupportedCodec.mimeType != preferredRTCRtpCodecCapability.mimeType) {
-                                ourSupportedCodecs.push(browserSupportedCodec);
-                            } else if (
-                                browserSupportedCodec?.sdpFmtpLine !=
-                                preferredRTCRtpCodecCapability?.sdpFmtpLine
-                            ) {
-                                ourSupportedCodecs.push(browserSupportedCodec);
-                            }
-                        }
+                    // Put our preferred codec from the codecs options drop down first, followed by everything else the browser supports
+                    const codecPreferences = BrowserUtils.buildCodecPreferences(
+                        this.preferredCodec,
+                        RTCRtpReceiver.getCapabilities('video').codecs
                     );
-
-                    for (const codec of ourSupportedCodecs) {
-                        if (codec?.sdpFmtpLine === undefined || codec.sdpFmtpLine === '') {
-                            // We can't dynamically add members to the codec, so instead remove the field if it's empty
-                            delete codec.sdpFmtpLine;
+                    if (codecPreferences === null) {
+                        Logger.Warning(
+                            `The preferred codec "${this.preferredCodec}" is not supported by this browser, leaving the codec order as the browser defaults.`
+                        );
+                    } else {
+                        try {
+                            transceiver.setCodecPreferences(codecPreferences);
+                        } catch (err) {
+                            // A rejected preference must not stop us from answering the offer
+                            Logger.Warning(
+                                `Could not set "${this.preferredCodec}" as the preferred codec, leaving the codec order as the browser defaults - ${err}`
+                            );
                         }
                     }
-
-                    transceiver.setCodecPreferences(ourSupportedCodecs);
                 }
             }
         }

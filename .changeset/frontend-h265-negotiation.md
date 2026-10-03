@@ -1,0 +1,5 @@
+---
+"@epicgames-ps/lib-pixelstreamingfrontend-ue5.8": patch
+---
+
+Make H.265/HEVC negotiation robust in the player. The preferred codec was put first in `setCodecPreferences` as a synthetic `video/<Name>` entry without checking the browser supports it, so `?PreferredCodec=H265` on a browser without HEVC decoding made `setCodecPreferences` throw and no answer was ever created. The preferred codec is now matched against the browser's own `RTCRtpReceiver.getCapabilities` entries (an unsupported one is skipped with a warning, and a rejected preference no longer stops the answer). H.265 streams now get the same `x-google-start-bitrate`/`x-google-max-bitrate` hints in the answer as H.264, which were previously only added to fmtp lines containing `level-asymmetry-allowed`. A warning is also logged when the browser can decode none of the codecs the streamer offered, which is how an H.265 stream on a browser without HEVC support otherwise shows up as a silent blank video. H.264 remains the default codec.
