@@ -492,6 +492,10 @@ async function onSignallingMessage(message) {
     }
 }
 
+function isCodecSupportedByMediasoup(mimeType) {
+    return mediasoup.getSupportedRtpCapabilities().codecs.some(codec => codec.mimeType.toLowerCase() === mimeType.toLowerCase());
+}
+
 async function startMediasoup() {
     let worker = await mediasoup.createWorker({
         logLevel: config.mediasoup.worker.logLevel,
@@ -505,7 +509,13 @@ async function startMediasoup() {
         process.exit(1);
     });
 
-    const mediaCodecs = config.mediasoup.router.mediaCodecs;
+    let mediaCodecs = config.mediasoup.router.mediaCodecs;
+    if (config.enableH265 && !isCodecSupportedByMediasoup('video/H265')) {
+        // Without this createRouter would throw and the SFU would not start at all
+        console.error('enableH265 is set but the installed mediasoup (%s) does not support H.265, which was removed in mediasoup 3.16.6. ' +
+            'Use mediasoup 3.15.5 to 3.16.5 to stream H.265. Continuing without H.265.', mediasoup.version);
+        mediaCodecs = mediaCodecs.filter(codec => codec.mimeType.toLowerCase() !== 'video/h265');
+    }
     const mediasoupRouter = await worker.createRouter({ mediaCodecs });
 
     return mediasoupRouter;

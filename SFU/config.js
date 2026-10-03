@@ -26,6 +26,10 @@ const config = {
   // Enable SVC support
   enableSVC: true,
 
+  // Enable H.265/HEVC support. The streamer must also be encoding H.265.
+  // Only works with mediasoup 3.15.5 to 3.16.5, as mediasoup 3.16.6 removed H.265 support.
+  enableH265: false,
+
   mediasoup: {
     worker: {
       rtcMinPort: 40000,
@@ -104,6 +108,23 @@ if(config.enableSVC)
     clockRate: 90000,
     parameters: {
       "profile-id": 2
+    }
+  });
+}
+
+if(config.enableH265)
+{
+  // The parameters are what is advertised back to the streamer, so they describe the profile we accept (Main, level 3.1)
+  config.mediasoup.router.mediaCodecs.push(
+  {
+    kind: 'video',
+    mimeType: 'video/H265',
+    clockRate: 90000,
+    parameters: {
+      "profile-id": 1,
+      "tier-flag": 0,
+      "level-id": 93,
+      "tx-mode": "SRST"
     }
   });
 }

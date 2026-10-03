@@ -12,7 +12,12 @@ Configuration is handled through the single config.js file.
 | SFUId | String | 'SFU' | The name this peer will be given that will then be displayed in the streamer list. Peers wishing to receive from this SFU should subscribe to this ID. |
 | subscribeStreamerId | String | 'DefaultStreamer' | This is the name of the streamer that this SFU should subscribe to and re-stream. |
 | retrySubscribeDelaySecs | Number | 10 | If subscribing to the given streamer fails, wait this many seconds before trying again. |
+| enableH265 | Boolean | false | Adds H.265/HEVC to the codecs the SFU accepts, for streamers encoding H.265. Players also need a browser that can decode H.265. Requires mediasoup 3.15.5 to 3.16.5, see below. |
 | mediasoup | Object | | Mediasoup-related configuration options. See below. |
+
+### H.265 support
+
+mediasoup removed H.265 support in 3.16.6, so the SFU pins `mediasoup` to exactly 3.15.5 in its `package.json`. Moving to a newer mediasoup, or letting a build float to one, means H.265 is no longer available. If `enableH265` is set and the installed mediasoup does not support H.265, the SFU logs an error at startup and carries on without it.
 
 ### Mediasoup related configuration options.
 
