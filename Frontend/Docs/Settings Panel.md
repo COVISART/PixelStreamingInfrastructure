@@ -49,7 +49,7 @@ This page will be updated with new features and commands as they become availabl
 | --- | --- |
 | **Min QP** | The lower bound of quantization parameter (QP) of the encoder. 0 = best quality, 51 = worst quality. |
 | **Max QP** | The upper bound of quantization parameter (QP) of the encoder. 0 = best quality, 51 = worst quality. |
-| **Preferred codec** | The preferred codec to be used during codec negotiation. |
+| **Preferred codec** | The preferred codec to be used during codec negotiation. By default, H.265 is used if the browser can decode it (Chrome 136+ with a hardware decoder, Safari 18+; not Firefox). Otherwise H.264 is used. If the requested codec is not supported by the browser, the default is used instead. |
 | **Preferred quality** | The preferred quality of the stream when using the SFU. If using H.264 or VP8, the quality options will be easily readable "Low", "Medium" or "High". If using VP9 SVC, the options will refer to all the possible spatial and temporal layer combinations supported as seen [here](https://www.w3.org/TR/webrtc-svc/#scalabilitymodes*) |
 
 ### WebRTC

@@ -10,6 +10,7 @@ import { SDPUtils } from '@epicgames-ps/lib-pixelstreamingcommon-ue5.7';
 import { LatencyCalculator, LatencyInfo } from './LatencyCalculator';
 
 export const kAbsCaptureTime = 'http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time';
+const kVideoBitrateParams = 'x-google-start-bitrate=10000;x-google-max-bitrate=100000';
 
 /**
  * Handles the Peer Connection
@@ -241,8 +242,11 @@ export class PeerConnectionController {
     mungeSDP(sdp: string, useMic: boolean) {
         let mungedSDP = sdp.replace(
             /(a=fmtp:\d+ .*level-asymmetry-allowed=.*)\r\n/gm,
-            '$1;x-google-start-bitrate=10000;x-google-max-bitrate=100000\r\n'
+            '$1;' + kVideoBitrateParams + '\r\n'
         );
+
+        // H.265 fmtp lines have no unique parameter we can match on, so match them by payload type instead
+        mungedSDP = this.addBitrateParamsForCodec(mungedSDP, 'H265');
 
         // set max bitrate to highest bitrate Opus supports
         let audioSDP = 'maxaveragebitrate=510000;';
@@ -268,6 +272,36 @@ export class PeerConnectionController {
             mungedSDP = SDPUtils.addVideoHeaderExtensionToSdp(mungedSDP, kAbsCaptureTime);
         }
 
+        return mungedSDP;
+    }
+
+    /**
+     * Append the video bitrate parameters to the fmtp line of every payload type using the given codec.
+     * If a payload type has no fmtp line, one is added after its rtpmap line.
+     * @param sdp - Session Descriptor as a string
+     * @param codecName - The codec name as it appears in the rtpmap line (e.g. H265)
+     * @returns A modified Session Descriptor
+     */
+    private addBitrateParamsForCodec(sdp: string, codecName: string): string {
+        const rtpmapRegex = new RegExp(`^a=rtpmap:(\\d+) ${codecName}/90000\\r?$`, 'gm');
+        let mungedSDP = sdp;
+        let match: RegExpExecArray | null;
+        while ((match = rtpmapRegex.exec(sdp)) !== null) {
+            const payloadType = match[1];
+            const fmtpRegex = new RegExp(`^(a=fmtp:${payloadType} .*?)(\\r?)$`, 'm');
+            if (fmtpRegex.test(mungedSDP)) {
+                mungedSDP = mungedSDP.replace(fmtpRegex, `$1;${kVideoBitrateParams}$2`);
+            } else {
+                const rtpmapLineRegex = new RegExp(
+                    `^(a=rtpmap:${payloadType} ${codecName}/90000)(\\r?)$`,
+                    'm'
+                );
+                mungedSDP = mungedSDP.replace(
+                    rtpmapLineRegex,
+                    `$1$2\na=fmtp:${payloadType} ${kVideoBitrateParams}$2`
+                );
+            }
+        }
         return mungedSDP;
     }
 
@@ -494,7 +528,13 @@ export class PeerConnectionController {
                         }
                     }
 
-                    transceiver.setCodecPreferences(ourSupportedCodecs);
+                    try {
+                        transceiver.setCodecPreferences(ourSupportedCodecs);
+                    } catch (err) {
+                        Logger.Warning(
+                            `Unable to set preferred codec ${this.preferredCodec}, using browser default codec order - ${err}`
+                        );
+                    }
                 }
             }
         }

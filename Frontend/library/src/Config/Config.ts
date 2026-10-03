@@ -227,13 +227,14 @@ export class Config {
             if (videoCodecs.length == 1) {
                 return videoCodecs[0];
             } else if (videoCodecs.length > 0) {
-                const defaultCodec = videoCodecs[0];
-                for (const codec of videoCodecs) {
-                    if (codec.startsWith('H264')) {
+                // Prefer H.265 where the browser can decode it, then H.264, then whatever comes first
+                for (const preferred of ['H265', 'H264']) {
+                    const codec = videoCodecs.find((c) => c.startsWith(preferred));
+                    if (codec) {
                         return codec;
                     }
                 }
-                return defaultCodec;
+                return videoCodecs[0];
             }
 
             Logger.Error('Could not find any reasonable video codec to assign as a default.');
@@ -256,8 +257,12 @@ export class Config {
                 }
             }
 
-            // If we weren't able to match, just return the codec as from the URL as-is.
-            return specifiedCodec;
+            // The browser does not support the requested codec (e.g. H265 on Firefox), so fall back to the default
+            const defaultCodec = getDefaultVideoCodec();
+            Logger.Warning(
+                `Codec ${specifiedCodec} is not supported by this browser, falling back to ${defaultCodec}`
+            );
+            return defaultCodec;
         };
 
         /**

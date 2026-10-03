@@ -219,4 +219,52 @@ describe('Config', () => {
             config.getTextSettingValue(TextParameters.SignallingServerUrl)
         ).toEqual('signalling-url-from-url-param');
     });
+
+    describe('default PreferredCodec', () => {
+        const h264 = 'H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f';
+        const h265 = 'H265 level-id=93;profile-id=1;tier-flag=0;tx-mode=SRST';
+        const vp8 = 'VP8 ';
+
+        const mockBrowserCodecs = (codecs: string[]) => {
+            jest.spyOn(RTCRtpReceiver, 'getCapabilities').mockReturnValue({
+                codecs: codecs.map((codec) => {
+                    const [name, fmtp] = codec.split(' ');
+                    return { mimeType: `video/${name}`, clockRate: 90000, sdpFmtpLine: fmtp };
+                }),
+                headerExtensions: []
+            });
+        };
+
+        it('should prefer H.265 when the browser supports it', () => {
+            mockBrowserCodecs([vp8, h264, h265]);
+
+            const config = new Config();
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h265);
+        });
+
+        it('should prefer H.264 when the browser does not support H.265', () => {
+            mockBrowserCodecs([vp8, h264]);
+
+            const config = new Config();
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h264);
+        });
+
+        it('should fall back to the default codec when the requested codec is not supported', () => {
+            mockBrowserCodecs([vp8, h264]);
+
+            const config = new Config({ initialSettings: { [OptionParameters.PreferredCodec]: 'H265' } });
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h264);
+        });
+
+        it('should match a requested codec name to the full browser codec', () => {
+            mockBrowserCodecs([vp8, h264, h265]);
+
+            const config = new Config({ initialSettings: { [OptionParameters.PreferredCodec]: 'H264' } });
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h264);
+        });
+    });
 });

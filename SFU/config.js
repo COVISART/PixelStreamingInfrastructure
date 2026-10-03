@@ -26,6 +26,10 @@ const config = {
   // Enable SVC support
   enableSVC: true,
 
+  // Enable H.265/HEVC support. The SFU forwards a single codec to every viewer, so if the streamer
+  // negotiates H.265 then all viewers must be able to decode it (e.g. Firefox cannot).
+  enableH265: true,
+
   mediasoup: {
     worker: {
       rtcMinPort: 40000,
@@ -84,6 +88,17 @@ const config = {
       initialAvailableOutgoingBitrate: 100_000_000,
     },
   },
+}
+
+if(config.enableH265)
+{
+  config.mediasoup.router.mediaCodecs.push(
+  {
+    kind: 'video',
+    mimeType: 'video/H265',
+    clockRate: 90000,
+    parameters: {}
+  });
 }
 
 if(config.enableSVC)
