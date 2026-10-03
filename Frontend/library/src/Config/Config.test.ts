@@ -1,4 +1,10 @@
-import { mockRTCRtpReceiver, unmockRTCRtpReceiver } from '../__test__/mockRTCRtpReceiver';
+import { Logger } from '@epicgames-ps/lib-pixelstreamingcommon-ue5.8';
+import {
+    chromeVideoCodecs,
+    mockRTCRtpReceiver,
+    mockRTCRtpReceiverWithCodecs,
+    unmockRTCRtpReceiver
+} from '../__test__/mockRTCRtpReceiver';
 import {
     Config,
     Flags,
@@ -218,5 +224,59 @@ describe('Config', () => {
         expect(
             config.getTextSettingValue(TextParameters.SignallingServerUrl)
         ).toEqual('signalling-url-from-url-param');
+    });
+
+    describe('preferred codec', () => {
+        const h264Codec =
+            'H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f';
+        const h265Codec = 'H265 level-id=93;profile-id=1;tier-flag=0;tx-mode=SRST';
+
+        beforeEach(() => {
+            window.history.replaceState({}, '', 'http://localhost/');
+        });
+
+        it('should offer H265 as an option when the browser supports it', () => {
+            mockRTCRtpReceiverWithCodecs(chromeVideoCodecs);
+
+            const config = new Config();
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).options).toContain(h265Codec);
+        });
+
+        it('should still default to H264 when the browser supports H265', () => {
+            mockRTCRtpReceiverWithCodecs(chromeVideoCodecs);
+
+            const config = new Config();
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h264Codec);
+        });
+
+        it('should resolve H265 in the initial settings to the codec the browser supports', () => {
+            mockRTCRtpReceiverWithCodecs(chromeVideoCodecs);
+
+            const config = new Config({ initialSettings: { [OptionParameters.PreferredCodec]: 'H265' } });
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h265Codec);
+        });
+
+        it('should resolve H265 in the URL parameters to the codec the browser supports', () => {
+            mockRTCRtpReceiverWithCodecs(chromeVideoCodecs);
+            window.history.replaceState({}, '', 'http://localhost/?PreferredCodec=H265');
+
+            const config = new Config({ useUrlParams: true });
+
+            expect(config.getSettingOption(OptionParameters.PreferredCodec).selected).toEqual(h265Codec);
+        });
+
+        it('should keep H265 as specified when the browser does not support it', () => {
+            jest.spyOn(Logger, 'Error').mockImplementation(() => undefined);
+            mockRTCRtpReceiverWithCodecs(chromeVideoCodecs.filter((codec) => codec.mimeType !== 'video/H265'));
+
+            const config = new Config({ initialSettings: { [OptionParameters.PreferredCodec]: 'H265' } });
+
+            const codecOption = config.getSettingOption(OptionParameters.PreferredCodec);
+            expect(codecOption.selected).toEqual('H265');
+            expect(codecOption.options.some((codec) => codec.startsWith('H265'))).toBe(false);
+        });
     });
 });
