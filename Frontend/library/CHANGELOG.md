@@ -1,5 +1,26 @@
 # @epicgames-ps/lib-pixelstreamingfrontend-ue5.6
 
+## 0.3.4
+
+### Patch Changes
+
+- a6c76ca: fix(frontend): keep the WebRTC handshake going when the browser refuses webcam or microphone access. With `UseCamera` or `UseMic` enabled, a denied permission or missing device made `getUserMedia` reject out of the transceiver setup, so a denied webcam skipped the preferred codec and the microphone, and the rejection went unhandled. The frontend now logs a warning and only receives that media.
+- 278d941: fix(frontend): track hovering mouse drags with pointer events and `setPointerCapture`, so moves and releases keep arriving when the cursor leaves the browser window. Held button chords are now sent as paired MouseDown/MouseUp messages, and cancelled or uncaptured pointers release their buttons. Closes #899.
+
+## 0.3.3
+
+### Patch Changes
+
+- c4870cf: Only accept the `ss` (signalling server url) URL parameter when it is a ws: or wss: url on the page's own hostname, so a crafted link can no longer connect a viewer to another server. A deployment whose signalling server is on a different host can allow it with the new `allowedSignallingServerHosts` Config option. Urls set through `initialSettings` or in code are not affected.
+- Updated dependencies [01fd040]
+    - @epicgames-ps/lib-pixelstreamingcommon-ue5.7@0.1.6
+
+## 0.3.2
+
+### Patch Changes
+
+- d9261da: Stop negotiating VP8 when the preferred H264 profile isn't offered by the streamer. The default preferred codec is the browser's first H264 profile (e.g. `42001f` on Chrome), chosen before the offer arrives; if the streamer only offered a different profile (e.g. `42e01f`), the preference matched nothing and the browser fell back to its own codec order, which starts with VP8. Codecs are now matched on their identifying parameters (H264 profile and packetization mode; VP9/AV1/H265 profile) rather than exact fmtp strings or names, the preferred codec is resolved to the closest one the streamer offered, and if none is offered the streamer's codec order is used instead of the browser's.
+
 ## 0.3.1
 
 ### Patch Changes

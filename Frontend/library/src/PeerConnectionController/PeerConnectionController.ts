@@ -5,6 +5,7 @@ import { Config, OptionParameters, Flags } from '../Config/Config';
 import { AggregatedStats } from './AggregatedStats';
 import { parseRtpParameters, splitSections } from 'sdp';
 import { RTCUtils } from '../Util/RTCUtils';
+import { getCodecIdentity, orderCodecCapabilities, resolvePreferredCodec } from '../Util/CodecUtils';
 import { CodecStats } from './CodecStats';
 import { SDPUtils } from '@epicgames-ps/lib-pixelstreamingcommon-ue5.7';
 import { LatencyCalculator, LatencyInfo } from './LatencyCalculator';
@@ -205,18 +206,17 @@ export class PeerConnectionController {
                     OptionParameters.PreferredCodec
                 ).options;
 
-                // The list of codecs directly contains the one that was negotiated, select that
-                if (allBrowserCodecs.includes(fullCodecName)) {
-                    this.config.setOptionSettingValue(OptionParameters.PreferredCodec, fullCodecName);
-                    return;
-                }
-
-                // If we couldn't match on the full name, try to match on just the codec shortname
-                const filteredList = allBrowserCodecs.filter(
-                    (option: string) => option.indexOf(codecShortname) !== -1
-                );
-                if (filteredList.length > 0) {
-                    this.config.setOptionSettingValue(OptionParameters.PreferredCodec, filteredList[0]);
+                // The negotiated fmtp line rarely matches an option exactly (e.g. the level is negotiated down), so
+                // fall back to the option describing the same codec. Matching on the name alone would select the
+                // first profile of the codec rather than the negotiated one.
+                const negotiatedCodecIdentity = getCodecIdentity(fullCodecName);
+                const negotiatedOption =
+                    allBrowserCodecs.find((option: string) => option === fullCodecName) ??
+                    allBrowserCodecs.find(
+                        (option: string) => getCodecIdentity(option) === negotiatedCodecIdentity
+                    );
+                if (negotiatedOption !== undefined) {
+                    this.config.setOptionSettingValue(OptionParameters.PreferredCodec, negotiatedOption);
                     return;
                 }
             }
@@ -437,22 +437,16 @@ export class PeerConnectionController {
             OptionParameters.PreferredCodec
         ).options;
         for (const ueCodec of allUECodecs) {
-            // Check if browser codecs directly matches UE codec (with parameters and everything)
-            if (allBrowserCodecs.includes(ueCodec)) {
-                allSupportedCodecs.push(ueCodec);
-                continue;
-            }
-            // Otherwise check if browser codec at least contains a match for the UE codec name (without parameters).
-            else {
-                const ueCodecNameAndParams: string[] = ueCodec.split(' ');
-                const ueCodecName = ueCodecNameAndParams[0];
-                for (const browserCodec of allBrowserCodecs) {
-                    if (browserCodec.includes(ueCodecName)) {
-                        // We pass browser codec here as they option contain extra parameters.
-                        allSupportedCodecs.push(browserCodec);
-                        break;
-                    }
-                }
+            // Prefer an exact match. Otherwise accept a browser codec that only differs in parameters that don't
+            // identify the codec (e.g. its level), but never one with a different profile, as matching on the name
+            // alone would map every profile of a codec onto the browser's first entry for it.
+            // We pass the browser codec as its fmtp line is what setCodecPreferences expects.
+            const ueCodecIdentity = getCodecIdentity(ueCodec);
+            const browserCodec =
+                allBrowserCodecs.find((codec) => codec === ueCodec) ??
+                allBrowserCodecs.find((codec) => getCodecIdentity(codec) === ueCodecIdentity);
+            if (browserCodec !== undefined && !allSupportedCodecs.includes(browserCodec)) {
+                allSupportedCodecs.push(browserCodec);
             }
         }
         return allSupportedCodecs;
@@ -487,49 +481,30 @@ export class PeerConnectionController {
         }
 
         if (RTCRtpReceiver.getCapabilities && this.preferredCodec != '') {
+            // The codecs options drop down holds the codecs we can use, in the remote peer's order of preference
+            // when it has sent us its codecs
+            const supportedCodecs: string[] = this.config.getSettingOption(
+                OptionParameters.PreferredCodec
+            ).options;
+            // The preferred codec may be a profile the remote peer didn't offer, so prefer the closest one it did.
+            // After that, fall back to the remote peer's order rather than the browser's, which starts with VP8.
+            const preferredCodec = resolvePreferredCodec(this.preferredCodec, supportedCodecs);
+            const codecPreferences = orderCodecCapabilities(
+                RTCRtpReceiver.getCapabilities('video')?.codecs ?? [],
+                preferredCodec !== undefined ? [preferredCodec, ...supportedCodecs] : supportedCodecs
+            );
+
             for (const transceiver of this.peerConnection?.getTransceivers() ?? []) {
                 if (
                     transceiver &&
                     transceiver.receiver &&
                     transceiver.receiver.track &&
                     transceiver.receiver.track.kind === 'video' &&
-                    transceiver.setCodecPreferences
+                    transceiver.setCodecPreferences &&
+                    codecPreferences.length > 0
                 ) {
-                    // Get our preferred codec from the codecs options drop down
-                    const preferredRTPCodec = this.preferredCodec.split(' ');
-                    const preferredRTCRtpCodecCapability: RTCRtpCodec = {
-                        mimeType: 'video/' + preferredRTPCodec[0] /* Name */,
-                        clockRate: 90000 /* All current video formats in browsers have 90khz clock rate */,
-                        sdpFmtpLine: preferredRTPCodec[1] ? preferredRTPCodec[1] : ''
-                    };
-
-                    // Populate a list of codecs we will support with our preferred one in the first position
-                    const ourSupportedCodecs: Array<RTCRtpCodec> = [preferredRTCRtpCodecCapability];
-
-                    // Go through all codecs the browser supports and add them to the list (in any order)
-                    RTCRtpReceiver.getCapabilities('video').codecs.forEach(
-                        (browserSupportedCodec: RTCRtpCodec) => {
-                            // Don't add our preferred codec again, but add everything else
-                            if (browserSupportedCodec.mimeType != preferredRTCRtpCodecCapability.mimeType) {
-                                ourSupportedCodecs.push(browserSupportedCodec);
-                            } else if (
-                                browserSupportedCodec?.sdpFmtpLine !=
-                                preferredRTCRtpCodecCapability?.sdpFmtpLine
-                            ) {
-                                ourSupportedCodecs.push(browserSupportedCodec);
-                            }
-                        }
-                    );
-
-                    for (const codec of ourSupportedCodecs) {
-                        if (codec?.sdpFmtpLine === undefined || codec.sdpFmtpLine === '') {
-                            // We can't dynamically add members to the codec, so instead remove the field if it's empty
-                            delete codec.sdpFmtpLine;
-                        }
-                    }
-
                     try {
-                        transceiver.setCodecPreferences(ourSupportedCodecs);
+                        transceiver.setCodecPreferences(codecPreferences);
                     } catch (err) {
                         Logger.Warning(
                             `Unable to set preferred codec ${this.preferredCodec}, using browser default codec order - ${err}`
@@ -564,6 +539,25 @@ export class PeerConnectionController {
         }
     }
 
+    /**
+     * Ask the browser for a media stream, returning null when it can't give one, so that the stream is only
+     * received instead of failing the WebRTC handshake
+     * @param constraints - The media to ask for
+     * @param device - The device being asked for, for logging
+     * @returns The media stream, or null when access was denied or there is no such device
+     */
+    private async getUserMedia(
+        constraints: MediaStreamConstraints,
+        device: string
+    ): Promise<MediaStream | null> {
+        try {
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+            Logger.Warning(`Unable to access the ${device}, so it won't be sent to the streamer: ${error}`);
+            return null;
+        }
+    }
+
     async setupVideoSender(hasVideoReceiver: boolean) {
         // set the media send options
         const mediaSendOptions: MediaStreamConstraints = {
@@ -571,7 +565,7 @@ export class PeerConnectionController {
         };
 
         // Note using webcam on android chrome requires SSL or chrome://flags/ "unsafely-treat-insecure-origin-as-secure"
-        const stream = await navigator.mediaDevices.getUserMedia(mediaSendOptions);
+        const stream = await this.getUserMedia(mediaSendOptions, 'webcam');
 
         if (stream) {
             if (hasVideoReceiver) {
@@ -621,7 +615,7 @@ export class PeerConnectionController {
         };
 
         // Note using mic on android chrome requires SSL or chrome://flags/ "unsafely-treat-insecure-origin-as-secure"
-        const stream = await navigator.mediaDevices.getUserMedia(mediaSendOptions);
+        const stream = await this.getUserMedia(mediaSendOptions, 'microphone');
         if (stream) {
             if (hasAudioReceiver) {
                 for (const transceiver of this.peerConnection?.getTransceivers() ?? []) {
@@ -732,12 +726,6 @@ export class PeerConnectionController {
                         .join(';');
                 const match = matcher.exec(str);
                 if (match !== null) {
-                    if (c.name === 'VP9') {
-                        // UE answers don't specify profile but we know we want profile 0
-                        c.parameters = {
-                            'profile-id': '0'
-                        };
-                    }
                     const codecStr: string =
                         c.name +
                         ' ' +

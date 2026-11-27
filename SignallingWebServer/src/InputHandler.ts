@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 import { SignallingServer } from '@epicgames-ps/lib-pixelstreamingsignalling-ue5.7';
-import { IProgramOptions, beautify } from './Utils';
+import { IProgramOptions, beautify, redactConfig } from './Utils';
 
 interface IHandlerFunc {
     desc: string;
@@ -10,7 +10,10 @@ interface IHandlerFunc {
 export function initInputHandler(options: IProgramOptions, signallingServer: SignallingServer) {
     const stdin = process.stdin;
 
-    stdin.setRawMode(true);
+    // A pipe or a service has no terminal to put into raw mode, and setRawMode is not a function there.
+    if (stdin.isTTY) {
+        stdin.setRawMode(true);
+    }
     stdin.resume();
     stdin.setEncoding('utf8');
 
@@ -34,7 +37,8 @@ export function initInputHandler(options: IProgramOptions, signallingServer: Sig
             process.stdout.write(`\th - Help.\n`);
             process.stdout.write(`\tq - Quit.\n`);
         } else {
-            const handler = handlers[key];
+            // Own keys only: 'constructor' and the like would otherwise reach Object.prototype and crash.
+            const handler = Object.prototype.hasOwnProperty.call(handlers, key) ? handlers[key] : undefined;
             if (!handler) {
                 process.stdout.write(`${key}: No handler.\n`);
             } else {
@@ -45,7 +49,9 @@ export function initInputHandler(options: IProgramOptions, signallingServer: Sig
 }
 
 function printConfig(options: IProgramOptions) {
-    process.stdout.write(`${beautify(options)}\n`);
+    // Redacted like the --log_config dump, and for the same reason: stdout is routinely redirected
+    // to a file by a service supervisor, so printing a secret here writes it to disk just as surely.
+    process.stdout.write(`${beautify(redactConfig(options))}\n`);
 }
 
 function printServerInfo(_options: IProgramOptions, _signallingServer: SignallingServer) {

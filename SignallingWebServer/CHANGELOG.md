@@ -1,5 +1,31 @@
 # @epicgames-ps/wilbur
 
+## 3.3.0
+
+### Minor Changes
+
+- fdde8a6: Add `--player_token` (or `--player_token_file`), an optional shared token that a player must present to connect. It is checked with the `playerWsOptions.verifyClient` seam the security guidelines already recommend, so a player that cannot present it is refused during the HTTP upgrade with `401` and never becomes a connection — which is what keeps the config message, and any TURN credential in its peer options, away from it. The token is accepted as a `?token=` query parameter or an `Authorization: Bearer` header, compared over SHA-256 digests so neither its length nor the position of the first difference is observable, removed from the request before the connection is logged, and kept out of `--save`, the `--log_config` dump, the `--stdin` config dump and — when `--player_token_file` is used — the process command line. Each refusal is logged with its source address, since the player port is not covered by the HTTP rate limiter. Streamer and SFU connections are unaffected, and no player connection is refused when no token is supplied. See `Docs/Security-Guidelines.md`.
+- fdde8a6: Add optional `--rest_api_token` and `--rest_api_token_file`. When set, every request under `/api`, including `/api/api-definition`, must send the token in an `Authorization: Bearer` header or is refused with 401. Without a token the REST API stays open as before, and the server now warns at startup when `--rest_api` is enabled without one. `GET /api/config` no longer returns the configuration objects whole: ICE server usernames and credentials are replaced with `<redacted>`, and it returns only the ports, subscriber limit, keepalive timeout, peer options and protocol version, no longer the HTTP server and WebSocket options. The player and streamer tokens never covered the REST API, so `/api/config` handed out static TURN credentials that `--player_token` exists to protect.
+- fdde8a6: Add optional `--sfu_token` and `--sfu_token_file` to Wilbur, matching `--streamer_token`: an SFU that does not present the token is refused at the HTTP upgrade with 401. The SFU gains `signallingToken` and `signallingTokenFile` (in `config.js` or as `--signallingToken=` / `--signallingTokenFile=`), sent as an `Authorization: Bearer` header and redacted from the config it prints at startup. Authentication remains disabled by default.
+- fdde8a6: Add optional `--streamer_token` and `--streamer_token_file` shared-token authentication for the streamer WebSocket listener, mirroring existing player-token behavior. Authentication remains disabled by default, so existing deployments are unaffected.
+- fdde8a6: Add `--streamer_host` and `--sfu_host`, which set the address the streamer and SFU ports listen on, such as 127.0.0.1 when streamers connect from the same machine or through a tunnel. Without them both ports listen on every address, as before.
+
+### Patch Changes
+
+- fdde8a6: Redact `turn_secret` and `player_token` in the interactive config dump. Pressing `c` with `--stdin` wrote the whole options object to stdout, and a service supervisor routinely redirects stdout to a file — so the dump put a secret on disk just as surely as the `--log_config` dump it was already redacted in.
+
+## 3.2.1
+
+### Patch Changes
+
+- 281e6cc: Bound what the signalling server writes to its log. Every message a player sent was written to the log file whole, and the daily file had no size limit, so a client could make the log grow as fast as it could send. Log text and protocol messages longer than 16 KiB are now cut to that length, with their full length noted, and the log files are limited in size and number: by default 14 files of 100 MB, set with `logMaxSize` and `logMaxFiles` in `InitLogging`, or `--log_max_size` and `--log_max_files` in wilbur. Files are now kept by count rather than for 14 days.
+- 4346461: Stop two paths from ending the signalling server. With `--stdin`, the server called `setRawMode` unconditionally, which does not exist when stdin is a pipe or a service, so startup threw. A stdin chunk that named an object property, such as `constructor`, was looked up on the command table and the resulting TypeError ended the process. Both are fixed: raw mode is only set on a terminal, and only the table's own keys are commands. A failed write of the config under `--save` is now logged instead of thrown from the file callback, which also ended the process.
+- Updated dependencies [2d098e4]
+- Updated dependencies [281e6cc]
+- Updated dependencies [01fd040]
+- Updated dependencies [6d53a43]
+    - @epicgames-ps/lib-pixelstreamingsignalling-ue5.7@0.5.1
+
 ## 3.2.0
 
 ### Minor Changes
